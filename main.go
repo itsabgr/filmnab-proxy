@@ -39,12 +39,11 @@ func main() {
 		ctx, cancel := context.WithTimeout(request.Context(), time.Second*10)
 		defer cancel()
 		request = request.WithContext(ctx)
+		writer.Header().Set("Access-Control-Allow-Methods", "OPTIONS, GET")
+		writer.Header().Set("Access-Control-Allow-Origin", *flagCORS)
 		switch request.Method {
 		case http.MethodGet:
-			break
 		case http.MethodOptions:
-			writer.Header().Set("Access-Control-Allow-Methods", "OPTIONS, GET")
-			writer.Header().Set("Access-Control-Allow-Origin", *flagCORS)
 			writer.WriteHeader(http.StatusNoContent)
 			return
 		default:
