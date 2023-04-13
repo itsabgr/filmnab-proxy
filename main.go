@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"github.com/jlaffaye/ftp"
 	"io"
 	"log"
@@ -113,7 +112,7 @@ func main() {
 	}
 	go func() {
 		time.Sleep(time.Second)
-		fmt.Println("ready")
+		log.Println("ready")
 	}()
 	if *flagKey == "" {
 		if err := httpServer.ListenAndServe(); err != nil {
