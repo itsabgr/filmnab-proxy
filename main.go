@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/jlaffaye/ftp"
-	_ "github.com/jlaffaye/ftp"
 	"io"
 	"log"
 	"net/http"
