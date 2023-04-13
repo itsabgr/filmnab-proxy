@@ -7,8 +7,10 @@ import (
 	"github.com/jlaffaye/ftp"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -85,6 +87,11 @@ func main() {
 			if err = resp.SetDeadline(deadline); err != nil {
 				http.Error(writer, err.Error(), http.StatusInternalServerError)
 				return
+			}
+		}
+		if ext := filepath.Ext(filePath); ext != "" {
+			if mime := mime.TypeByExtension(ext); mime != "" {
+				writer.Header().Add("Content-Type", mime)
 			}
 		}
 		if _, err := io.Copy(writer, resp); err != nil {
