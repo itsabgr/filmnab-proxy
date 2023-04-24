@@ -32,6 +32,7 @@ func main() {
 	ftpConnPool := NewFTPPool(*ftpURL)
 	ftpConnPool.Put(Must(ftpConnPool.Get(context.Background())))
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("X-Robots-Tag", "noindex, nofollow")
 		Close(request.Body)
 		ctx, cancel := context.WithTimeout(request.Context(), time.Second*10)
 		defer cancel()
