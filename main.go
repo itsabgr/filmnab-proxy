@@ -31,8 +31,7 @@ func main() {
 	var ftpURL = Must(url.Parse(*flagHost))
 	ftpConnPool := NewFTPPool(*ftpURL)
 	ftpConnPool.Put(Must(ftpConnPool.Get(context.Background())))
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Body != nil {
 			request.Body.Close()
 		}
@@ -100,7 +99,7 @@ func main() {
 	})
 	httpServer := http.Server{
 		Addr:                         *flagAddr,
-		Handler:                      mux,
+		Handler:                      handler,
 		DisableGeneralOptionsHandler: true,
 		ReadHeaderTimeout:            time.Second * 2,
 		ReadTimeout:                  time.Second * 2,
