@@ -32,9 +32,7 @@ func main() {
 	ftpConnPool := NewFTPPool(*ftpURL)
 	ftpConnPool.Put(Must(ftpConnPool.Get(context.Background())))
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Body != nil {
-			request.Body.Close()
-		}
+		Close(request.Body)
 		ctx, cancel := context.WithTimeout(request.Context(), time.Second*10)
 		defer cancel()
 		request = request.WithContext(ctx)
@@ -79,7 +77,7 @@ func main() {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer resp.Close()
+		defer Close(resp)
 		if deadline, ok := request.Context().Deadline(); ok {
 			if err = resp.SetDeadline(deadline); err != nil {
 				http.Error(writer, err.Error(), http.StatusInternalServerError)
@@ -87,8 +85,8 @@ func main() {
 			}
 		}
 		if ext := filepath.Ext(filePath); ext != "" {
-			if mime := mime.TypeByExtension(ext); mime != "" {
-				writer.Header().Add("Content-Type", mime)
+			if mimeType := mime.TypeByExtension(ext); mimeType != "" {
+				writer.Header().Add("Content-Type", mimeType)
 			}
 		}
 		if _, err := io.Copy(writer, resp); err != nil {
