@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
+	"errors"
 	"flag"
 	"github.com/jlaffaye/ftp"
 	"io"
@@ -10,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -20,6 +22,7 @@ var flagCrt = flag.String("crt", "", "https certificate file path")
 var flagHost = flag.String("host", "ftp(s)://[user]:[pass]@[host]:[port]/root", "* ftp host uri")
 var flagCORS = flag.String("cors", "*", "'Access-Control-Allow-Origin' header value")
 var flagCache = flag.String("cache", "no-store", "'Cache-Control' header value")
+var flagPK = flag.String("pk", "", "ed25519 public key in hex")
 
 func main() {
 	defer func() {
@@ -28,6 +31,10 @@ func main() {
 		}
 	}()
 	flag.Parse()
+	publicKey := ed25519.PublicKey(Must(hex.DecodeString(*flagPK)))
+	if len(publicKey) != ed25519.PublicKeySize {
+		panic(errors.New("invalid public key size"))
+	}
 	var ftpURL = Must(url.Parse(*flagHost))
 	ftpConnPool := NewFTPPool(*ftpURL)
 	ftpConnPool.Put(Must(ftpConnPool.Get(context.Background())))
@@ -48,20 +55,11 @@ func main() {
 			http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var userAuth string
-		var filePath string
-		{
-			requestPathParts := strings.SplitN(request.URL.Path, "/", 3)
-			if len(requestPathParts) != 3 {
-				http.Error(writer, "no authorization provided", http.StatusBadRequest)
-				return
-			}
-			userAuth = requestPathParts[1]
-			filePath = requestPathParts[2]
+		filePath, err := Auth(request.URL.Path, publicKey)
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusUnauthorized)
+			return
 		}
-		//TODO do authorization here **
-		func(string) {}(userAuth)
-		//**
 		conn, err := ftpConnPool.Get(request.Context())
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
