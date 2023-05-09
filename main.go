@@ -1,10 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
-	"encoding/hex"
-	"errors"
 	"flag"
 	"github.com/jlaffaye/ftp"
 	"io"
@@ -12,7 +11,10 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
+	"runtime"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,7 +24,7 @@ var flagCrt = flag.String("crt", "", "https certificate file path")
 var flagHost = flag.String("host", "ftp(s)://[user]:[pass]@[host]:[port]/root", "* ftp host uri")
 var flagCORS = flag.String("cors", "*", "'Access-Control-Allow-Origin' header value")
 var flagCache = flag.String("cache", "no-store", "'Cache-Control' header value")
-var flagPK = flag.String("pk", "", "ed25519 public key in hex")
+var flagPK = flag.String("pk", "", "ed25519 public key endpoint")
 
 func main() {
 	defer func() {
@@ -31,10 +33,24 @@ func main() {
 		}
 	}()
 	flag.Parse()
-	publicKey := ed25519.PublicKey(Must(hex.DecodeString(*flagPK)))
-	if len(publicKey) != ed25519.PublicKeySize {
-		panic(errors.New("invalid public key size"))
-	}
+	var publicKey atomic.Pointer[ed25519.PublicKey]
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		for {
+			pk, err := LoadPK(*flagPK)
+			if err == nil {
+				old := publicKey.Load()
+				if !bytes.Equal(*old, pk) {
+					publicKey.Store(&pk)
+					log.New(os.Stdout, "", 0).Println(time.Now(), "INFO", "public key updated")
+				}
+			} else {
+				log.New(os.Stderr, "", 0).Println(time.Now(), "WARN", "load public key:", err)
+			}
+			time.Sleep(time.Second * 5)
+		}
+	}()
 	var ftpURL = Must(url.Parse(*flagHost))
 	ftpConnPool := NewFTPPool(*ftpURL)
 	ftpConnPool.Put(Must(ftpConnPool.Get(context.Background())))
@@ -55,7 +71,7 @@ func main() {
 			http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		filePath, err := Auth(request.URL.Path, publicKey)
+		filePath, err := Auth(request.URL.Path, *publicKey.Load())
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusUnauthorized)
 			return

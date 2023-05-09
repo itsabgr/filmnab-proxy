@@ -24,7 +24,18 @@ func TestAuthCorrectness(t *testing.T) {
 		t.Fail()
 	}
 }
-
+func TestPrefixedDir(t *testing.T) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	deadline := time.Now().Add(time.Minute)
+	token1 := genAuth("dir/sub/dir2", deadline, key)
+	token2 := genAuth("/dir/sub/dir2", deadline, key)
+	if token2 != token1 {
+		t.Fail()
+	}
+}
 func TestAuthSubDir(t *testing.T) {
 	public, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

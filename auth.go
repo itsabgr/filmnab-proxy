@@ -18,8 +18,13 @@ func Auth(path string, public ed25519.PublicKey) (filePath string, err error) {
 	return "/" + strings.SplitN(path, "/", 3)[2], nil
 }
 func genAuth(dir string, deadline time.Time, key ed25519.PrivateKey) string {
-	token := strconv.FormatInt(deadline.UTC().Unix(), 10) + "/" + dir
-	sig := base64.URLEncoding.EncodeToString(ed25519.Sign(key, []byte(token)))
+	var token string
+	if strings.HasPrefix(dir, "/") {
+		token = strconv.FormatInt(deadline.UTC().Unix(), 10) + dir
+	} else {
+		token = strconv.FormatInt(deadline.UTC().Unix(), 10) + "/" + dir
+	}
+	sig := base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, []byte(token)))
 	return sig + "/" + token
 }
 func auth(dir string, public ed25519.PublicKey) (err error) {
@@ -27,7 +32,7 @@ func auth(dir string, public ed25519.PublicKey) (err error) {
 	if len(parts) != 2 {
 		return errors.New("no auth")
 	}
-	sig, err := base64.URLEncoding.DecodeString(parts[0])
+	sig, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
 		return err
 	}
