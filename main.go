@@ -41,7 +41,7 @@ func main() {
 			pk, err := LoadPK(*flagPK)
 			if err == nil {
 				old := publicKey.Load()
-				if !bytes.Equal(*old, pk) {
+				if old == nil || !bytes.Equal(*old, pk) {
 					publicKey.Store(&pk)
 					log.New(os.Stdout, "", 0).Println(time.Now(), "INFO", "public key updated")
 				}
