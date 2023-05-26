@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"flag"
-	"github.com/jlaffaye/ftp"
+	"fmt"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"io"
 	"log"
 	"mime"
@@ -25,6 +27,7 @@ var flagHost = flag.String("host", "ftp(s)://[user]:[pass]@[host]:[port]/root", 
 var flagCORS = flag.String("cors", "*", "'Access-Control-Allow-Origin' header value")
 var flagCache = flag.String("cache", "no-store", "'Cache-Control' header value")
 var flagPK = flag.String("pk", "", "ed25519 public key endpoint")
+var flagCacheSize = flag.Int64("cache-size", 1e+9, "max LRU cache size in bytes")
 
 func main() {
 	defer func() {
@@ -51,12 +54,39 @@ func main() {
 			time.Sleep(time.Second * 5)
 		}
 	}()
-	var ftpURL = Must(url.Parse(*flagHost))
+	var ftpURL = must(url.Parse(*flagHost))
 	ftpConnPool := NewFTPPool(*ftpURL)
-	ftpConnPool.Put(Must(ftpConnPool.Get(context.Background())))
+	ftpConnPool.Put(must(ftpConnPool.Get(context.Background())))
+	var cache *Cache
+	{
+		var cacheDir = filepath.Join(os.TempDir(), fmt.Sprintf("proxycache_%d", time.Now().Unix()))
+		defer os.RemoveAll(cacheDir)
+		db := must(leveldb.OpenFile(cacheDir, &opt.Options{ErrorIfExist: true}))
+		defer func() { _ = db.Close() }()
+		cache = newCache(db, *flagCacheSize, func(ctx context.Context, filePath string) ([]byte, error) {
+			conn, err := ftpConnPool.Get(ctx)
+			if err != nil {
+				return nil, err
+			}
+			defer ftpConnPool.Put(conn)
+			resp, err := conn.Retr(filePath)
+			if err != nil {
+				return nil, err
+			}
+			defer func() {
+				_ = resp.Close()
+			}()
+			if deadline, ok := ctx.Deadline(); ok {
+				if err = resp.SetDeadline(deadline); err != nil {
+					return nil, err
+				}
+			}
+			return io.ReadAll(resp)
+		})
+	}
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("X-Robots-Tag", "noindex, nofollow")
-		Close(request.Body)
+		_ = request.Body.Close()
 		ctx, cancel := context.WithTimeout(request.Context(), time.Second*10)
 		defer cancel()
 		request = request.WithContext(ctx)
@@ -71,44 +101,28 @@ func main() {
 			http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		writer.Header().Set("Cache-Control", *flagCache)
 		filePath, err := Auth(request.URL.Path, *publicKey.Load())
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		conn, err := ftpConnPool.Get(request.Context())
+		res, err := cache.Get(request.Context(), filePath)
 		if err != nil {
 			http.Error(writer, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer ftpConnPool.Put(conn)
-		writer.Header().Set("Cache-Control", *flagCache)
-		if fileInfo, err := conn.GetEntry(filePath); err != nil || fileInfo.Type != ftp.EntryTypeFile {
+		writer.Header().Add("X-Cache", res.Header())
+		if len(res.Value) == 0 {
 			http.NotFound(writer, request)
 			return
-		}
-		resp, err := conn.Retr(filePath)
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer Close(resp)
-		if deadline, ok := request.Context().Deadline(); ok {
-			if err = resp.SetDeadline(deadline); err != nil {
-				http.Error(writer, err.Error(), http.StatusInternalServerError)
-				return
-			}
 		}
 		if ext := filepath.Ext(filePath); ext != "" {
 			if mimeType := mime.TypeByExtension(ext); mimeType != "" {
 				writer.Header().Add("Content-Type", mimeType)
 			}
 		}
-		if _, err := io.Copy(writer, resp); err != nil {
-			http.Error(writer, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		return
+		_, _ = writer.Write(res.Value)
 	})
 	httpServer := http.Server{
 		Addr:                         *flagAddr,

@@ -9,16 +9,11 @@ import (
 	"net/http"
 )
 
-func Must[R any](r R, e error) R {
+func must[R any](r R, e error) R {
 	if e != nil {
 		panic(e)
 	}
 	return r
-}
-func Close(closer io.Closer) {
-	if closer != nil {
-		_ = closer.Close()
-	}
 }
 func LoadPK(url string) (ed25519.PublicKey, error) {
 	res, err := http.Get(url)
@@ -30,7 +25,9 @@ func LoadPK(url string) (ed25519.PublicKey, error) {
 	}
 
 	res.Close = true
-	defer Close(res.Body)
+	defer func() {
+		_ = res.Body.Close()
+	}()
 	b, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
@@ -43,4 +40,9 @@ func LoadPK(url string) (ed25519.PublicKey, error) {
 		return nil, errors.New("invalid public key size")
 	}
 	return pub, nil
+}
+func assert(cond bool) {
+	if !cond {
+		panic(errors.New("assertion"))
+	}
 }
