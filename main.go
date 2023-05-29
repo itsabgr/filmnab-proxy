@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -23,7 +24,7 @@ import (
 var flagAddr = flag.String("addr", "", "* listening address")
 var flagKey = flag.String("key", "", "https key file path")
 var flagCrt = flag.String("crt", "", "https certificate file path")
-var flagHost = flag.String("host", "ftp(s)://[user]:[pass]@[host]:[port]/root", "* ftp host uri")
+var flagHost = flag.String("host", "", "ftp host uri file path")
 var flagCORS = flag.String("cors", "*", "'Access-Control-Allow-Origin' header value")
 var flagCache = flag.String("cache", "no-store", "'Cache-Control' header value")
 var flagPK = flag.String("pk", "", "ed25519 public key endpoint")
@@ -54,7 +55,7 @@ func main() {
 			time.Sleep(time.Second * 5)
 		}
 	}()
-	var ftpURL = must(url.Parse(*flagHost))
+	var ftpURL = must(url.Parse(strings.TrimSpace(string(must(os.ReadFile(*flagHost))))))
 	ftpConnPool := NewFTPPool(*ftpURL)
 	ftpConnPool.Put(must(ftpConnPool.Get(context.Background())))
 	var cache *Cache
