@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/opt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,12 +14,10 @@ import (
 
 func TestLargeFile(t *testing.T) {
 	dbPath := filepath.Join(os.TempDir(), strconv.FormatInt(time.Now().Unix(), 10))
-	db := must(leveldb.OpenFile(dbPath, &opt.Options{ErrorIfExist: true}))
-	defer db.Close()
-	defer os.RemoveAll(dbPath)
-	cache := newCache(db, 1e+10, func(ctx context.Context, key string) ([]byte, error) {
+	cache := Open(dbPath, 1e+10, func(ctx context.Context, key string) ([]byte, error) {
 		return make([]byte, 1e+9), nil
 	})
+	defer func() { _ = cache.Close() }()
 	result := must(cache.Get(context.Background(), "key"))
 	assert(!result.CacheUsed)
 	assert(result.ValueCached)
@@ -32,7 +28,7 @@ func TestLargeFile(t *testing.T) {
 	assert(len(result.Value) == 1e+9)
 
 }
-func insert(c *Cache, key, size int, CacheUsed, ValueCached bool, Deleted int) {
+func insert(c iCache, key, size int, CacheUsed, ValueCached bool, Deleted int) {
 	result := must(c.Get(context.Background(), fmt.Sprintf("%d:%d", key, size)))
 	assert(result.CacheUsed == CacheUsed)
 	assert(result.ValueCached == ValueCached)
@@ -41,13 +37,11 @@ func insert(c *Cache, key, size int, CacheUsed, ValueCached bool, Deleted int) {
 }
 func TestCache_LRU(t *testing.T) {
 	dbPath := filepath.Join(os.TempDir(), strconv.FormatInt(time.Now().Unix(), 10))
-	db := must(leveldb.OpenFile(dbPath, &opt.Options{ErrorIfExist: true}))
-	defer db.Close()
-	defer os.RemoveAll(dbPath)
-	cache := newCache(db, 1000, func(ctx context.Context, key string) ([]byte, error) {
+	cache := Open(dbPath, 1000, func(ctx context.Context, key string) ([]byte, error) {
 		size := must(strconv.Atoi(strings.Split(key, ":")[1]))
 		return make([]byte, size), nil
 	})
+	defer func() { _ = cache.Close() }()
 	insert(cache, 1, 1000, false, false, 0)
 	assert(cache.Size() == 0)
 	insert(cache, 2, 999, false, true, 0)
@@ -71,12 +65,10 @@ func TestCache_LRU(t *testing.T) {
 }
 func TestCache_Size(t *testing.T) {
 	dbPath := filepath.Join(os.TempDir(), strconv.FormatInt(time.Now().Unix(), 10))
-	db := must(leveldb.OpenFile(dbPath, &opt.Options{ErrorIfExist: true}))
-	defer db.Close()
-	defer os.RemoveAll(dbPath)
-	cache := newCache(db, 10000, func(ctx context.Context, key string) ([]byte, error) {
+	cache := Open(dbPath, 10000, func(ctx context.Context, key string) ([]byte, error) {
 		return make([]byte, 100), nil
 	})
+	defer func() { _ = cache.Close() }()
 	for i := range make([]struct{}, 111) {
 		result := must(cache.Get(context.Background(), strconv.Itoa(i)))
 		assert(!result.CacheUsed)
@@ -86,14 +78,13 @@ func TestCache_Size(t *testing.T) {
 	}
 	assert(cache.Size() == 100*100)
 }
+
 func TestCache_Get(t *testing.T) {
 	dbPath := filepath.Join(os.TempDir(), strconv.FormatInt(time.Now().Unix(), 10))
-	db := must(leveldb.OpenFile(dbPath, &opt.Options{ErrorIfExist: true}))
-	defer db.Close()
-	defer os.RemoveAll(dbPath)
-	cache := newCache(db, 10000, func(ctx context.Context, key string) ([]byte, error) {
+	cache := Open(dbPath, 10000, func(ctx context.Context, key string) ([]byte, error) {
 		return []byte("bar"), nil
 	})
+	defer func() { _ = cache.Close() }()
 	result := must(cache.Get(context.Background(), "foo"))
 	if string(result.Value) != "bar" {
 		t.Fatalf("expected bar get %s", string(result.Value))

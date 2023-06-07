@@ -5,44 +5,51 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"os"
 )
 
-func must[R any](r R, e error) R {
+func throw(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+func must[R any](r R, e error) R {
+	throw(e)
 	return r
 }
-func LoadPK(url string) (ed25519.PublicKey, error) {
-	res, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%d %s", res.StatusCode, res.Status)
-	}
 
-	res.Close = true
-	defer func() {
-		_ = res.Body.Close()
-	}()
-	b, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-	pub, err := base64.RawURLEncoding.DecodeString(string(b))
-	if err != nil {
-		return nil, err
-	}
-	if len(pub) != ed25519.PublicKeySize {
-		return nil, errors.New("invalid public key size")
-	}
-	return pub, nil
-}
 func assert(cond bool) {
 	if !cond {
 		panic(errors.New("assertion"))
 	}
+}
+
+func serve(httpServer *http.Server, cert, key string) error {
+	if key == "" {
+		return httpServer.ListenAndServe()
+	} else {
+		return httpServer.ListenAndServeTLS(cert, key)
+	}
+}
+
+func mustParsePublicKeys(keys ...string) []ed25519.PublicKey {
+	result := make([]ed25519.PublicKey, 0, len(keys))
+	for _, b64 := range keys {
+		pk := ed25519.PublicKey(must(base64.RawURLEncoding.DecodeString(b64)))
+		if len(pk) != ed25519.PublicKeySize {
+			panic(fmt.Errorf("public key size is not %d", ed25519.PublicKeySize))
+		}
+		result = append(result, pk)
+	}
+	return result
+}
+
+func removeFile(file *os.File) {
+	if file == nil {
+		return
+	}
+	name := file.Name()
+	_ = file.Close()
+	_ = os.Remove(name)
 }

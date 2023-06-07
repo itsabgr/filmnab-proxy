@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/syndtr/goleveldb/leveldb"
+	"io"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +19,11 @@ type indexEntry struct {
 type index struct {
 	map_ sync.Map
 	size atomic.Int64
+}
+type iCache interface {
+	Size() int64
+	io.Closer
+	Get(ctx context.Context, key string) (result, error)
 }
 
 func (i *index) sumSizes() int64 {
@@ -66,21 +73,67 @@ func (i *index) reset(key string, size int64) {
 }
 
 type OnMissing func(ctx context.Context, key string) ([]byte, error)
-type Cache struct {
+
+func (fn OnMissing) Size() int64 { return 0 }
+
+func (fn OnMissing) Close() error { return nil }
+
+func (fn OnMissing) Get(ctx context.Context, key string) (result, error) {
+	b, err := fn(ctx, key)
+	return result{
+		false,
+		false,
+		0,
+		b,
+	}, err
+}
+
+type cache struct {
 	db        *leveldb.DB
 	index     index
 	max       int64
 	onMissing OnMissing
+	path      string
 }
 
-func newCache(db *leveldb.DB, max int64, onMissing OnMissing) *Cache {
-	return &Cache{
-		db:        db,
-		onMissing: onMissing,
-		max:       max,
+func Open(path string, max int64, missing OnMissing) iCache {
+	if max < 0 {
+		panic(fmt.Errorf("non positive cache max size"))
 	}
+	if max > 0 {
+		db, err := leveldb.OpenFile(path, nil)
+		if err != nil {
+			return nil
+		}
+		throw(cleanDB(db))
+		return &cache{
+			max:       max,
+			path:      path,
+			onMissing: missing,
+			db:        db,
+		}
+	}
+	return missing
 }
-func (c *Cache) find(ctx context.Context, key string) (val []byte, cached bool, countDeleted int, err error) {
+func (c *cache) Close() error {
+	err := c.db.Close()
+	if err == nil {
+		err = os.RemoveAll(c.path)
+	}
+	return err
+}
+func cleanDB(db *leveldb.DB) error {
+	iter := db.NewIterator(nil, nil)
+	defer iter.Release()
+	for iter.Next() {
+		if err := db.Delete(iter.Key(), nil); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
+func (c *cache) find(ctx context.Context, key string) (val []byte, cached bool, countDeleted int, err error) {
 	val, err = c.onMissing(ctx, key)
 	if err != nil {
 		return nil, false, 0, err
@@ -98,7 +151,7 @@ func (c *Cache) find(ctx context.Context, key string) (val []byte, cached bool, 
 	c.index.reset(key, int64(len(val)))
 	return val, true, count, nil
 }
-func (c *Cache) clean(val int64) (bool, int, error) {
+func (c *cache) clean(val int64) (bool, int, error) {
 	if val >= c.max {
 		return false, 0, nil
 	}
@@ -127,7 +180,7 @@ type result struct {
 func (r *result) Header() string {
 	return fmt.Sprintf("%t,%t,%d", r.CacheUsed, r.ValueCached, r.Deleted)
 }
-func (c *Cache) Get(ctx context.Context, key string) (result, error) {
+func (c *cache) Get(ctx context.Context, key string) (result, error) {
 	if key == "" {
 		panic(errors.New("empty key"))
 	}
@@ -143,6 +196,6 @@ func (c *Cache) Get(ctx context.Context, key string) (result, error) {
 		panic(err)
 	}
 }
-func (c *Cache) Size() int64 {
+func (c *cache) Size() int64 {
 	return c.index.sumSizes()
 }

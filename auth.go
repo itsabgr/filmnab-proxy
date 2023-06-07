@@ -4,18 +4,30 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
-func Auth(path string, public ed25519.PublicKey) (filePath string, err error) {
-	path = strings.Trim(path, "/")
-	if err := auth(filepath.Dir(path), public); err != nil {
-		return "", err
+func Auth(path string, public ...ed25519.PublicKey) (filePath string, err error) {
+	if len(public) == 0 {
+		return path, nil
 	}
-	return "/" + strings.SplitN(path, "/", 3)[2], nil
+	fmt.Println(1)
+	path = strings.Trim(path, "/")
+	for _, pk := range public {
+		switch err = auth(filepath.Dir(path), pk); err {
+		case errNoAuth:
+			continue
+		case nil:
+			return "/" + strings.SplitN(path, "/", 3)[2], nil
+		default:
+			break
+		}
+	}
+	return "", err
 }
 func genAuth(dir string, deadline time.Time, key ed25519.PrivateKey) string {
 	var token string
@@ -27,10 +39,13 @@ func genAuth(dir string, deadline time.Time, key ed25519.PrivateKey) string {
 	sig := base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, []byte(token)))
 	return sig + "/" + token
 }
-func auth(dir string, public ed25519.PublicKey) (err error) {
+
+var errNoAuth = errors.New("no auth")
+
+func auth(dir string, public ed25519.PublicKey) error {
 	parts := strings.SplitN(dir, "/", 2)
 	if len(parts) != 2 {
-		return errors.New("no auth")
+		return errNoAuth
 	}
 	sig, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
