@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -18,6 +19,10 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	if len(request.URL.Path) > 512 {
+		http.Error(writer, "too large path", http.StatusBadRequest)
+		return
+	}
 	writer.Header().Set("X-Robots-Tag", "noindex, nofollow")
 	_ = request.Body.Close()
 	ctx, cancel := context.WithTimeout(request.Context(), time.Second*10)
@@ -55,5 +60,6 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Add("Content-Type", mimeType)
 		}
 	}
+	writer.Header().Set("Content-Length", strconv.FormatInt(int64(len(res.Value)), 10))
 	_, _ = writer.Write(res.Value)
 }
