@@ -1,16 +1,19 @@
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"gopkg.in/yaml.v3"
+	"golang.org/x/crypto/acme/autocert"
+	yaml "gopkg.in/yaml.v3"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -19,6 +22,11 @@ var config struct {
 	Server  struct {
 		Addr string `yaml:"addr"`
 		TLS  struct {
+			ACME struct {
+				Domains  []string `yaml:"domains"`
+				CacheDir string   `yaml:"cache-dir"`
+				Email    string   `yaml:"email"`
+			} `yaml:"acme"`
 			Key  string `yaml:"key"`
 			Cert string `yaml:"cert"`
 		} `yaml:"tls"`
@@ -33,6 +41,7 @@ var config struct {
 		} `yaml:"headers"`
 	} `yaml:"server"`
 	Source struct {
+		Test   bool   `yaml:"test"`
 		Bucket string `yaml:"bucket"`
 		Host   string `yaml:"host"`
 		ID     string `yaml:"id"`
@@ -44,22 +53,24 @@ var config struct {
 		Dir    string `yaml:"dir"`
 	} `yaml:"cache"`
 }
-var flagConfig = flag.String("c", "./config.yaml", "yaml config file path")
-
+var flagConfig = flag.String("c", "./s3proxy.yaml", "yaml config file path")
+var flagDebug = flag.Bool("debug", false, "debug mode")
 var tempDir = os.TempDir()
 
 func main() {
 	defer func() {
-		if err := recover(); err != nil {
-			log.Fatal(err)
+		if !*flagDebug {
+			if err := recover(); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}()
 	flag.Parse()
+	*flagConfig = must(filepath.Abs(*flagConfig))
+	fmt.Println("config", *flagConfig)
 	throw(yaml.Unmarshal(must(os.ReadFile(*flagConfig)), &config))
-	if config.S3Proxy == "" {
-		panic(errors.New(`config file does not contains "s3proxy""`))
-	} else {
-		fmt.Println("config: ", config.S3Proxy)
+	if config.S3Proxy != "2" {
+		panic(errors.New(`config file does not contains "s3proxy: 2""`))
 	}
 	if len(config.PublicKeys) == 0 {
 		fmt.Println("NO AUTH")
@@ -74,7 +85,7 @@ func main() {
 		Region:           aws.String("us-east-1"),
 		DisableSSL:       aws.Bool(false),
 		S3ForcePathStyle: aws.Bool(true),
-	}, config.Source.Bucket, tempDir))
+	}, config.Source.Bucket, config.Source.Test))
 	cache := Open(config.Cache.Dir, int64(config.Cache.SizeGB)*1e+9, client.Download)
 	defer func() { _ = cache.Close() }()
 	server := &Server{
@@ -94,5 +105,27 @@ func main() {
 		DisableGeneralOptionsHandler: true,
 		ErrorLog:                     log.New(io.Discard, "", 0),
 	}
-	log.Fatal(serve(httpServer, config.Server.TLS.Cert, config.Server.TLS.Key))
+	throw(serve(httpServer))
+}
+
+func serve(httpServer *http.Server) error {
+	if config.Server.TLS.Key != "" {
+		return httpServer.ListenAndServeTLS(config.Server.TLS.Cert, config.Server.TLS.Key)
+	}
+	if len(config.Server.TLS.ACME.Domains) > 0 {
+		if config.Server.TLS.ACME.CacheDir == "" {
+			panic(errors.New("config.Server.TLS.ACME.CacheDir is empty"))
+		}
+		throw(os.MkdirAll(config.Server.TLS.ACME.CacheDir, 0700))
+		acme := autocert.Manager{
+			Cache:      autocert.DirCache(config.Server.TLS.ACME.CacheDir),
+			HostPolicy: autocert.HostWhitelist(config.Server.TLS.ACME.Domains...),
+			Email:      config.Server.TLS.ACME.Email,
+		}
+		ln := must(tls.Listen("tcp", httpServer.Addr, acme.TLSConfig()))
+		defer func() { _ = ln.Close() }()
+		return httpServer.Serve(ln)
+	}
+	fmt.Println("NO TLS")
+	return httpServer.ListenAndServe()
 }
