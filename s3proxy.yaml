@@ -1,0 +1,33 @@
+#s3proxy config file
+s3proxy: 2
+server:
+  addr: ip:port
+  tls:
+    key: path
+    cert: path
+    acme:
+      domain: domain
+      email: email@addr
+      cache-dir: path
+  timeouts:
+    read: 3s
+    write: 15s
+    idle: 10s
+  headers:
+    cors: string
+    cache: string
+source:
+  test: 0s
+  bucket: string
+  host: string
+  id: string
+  key: string
+public-keys:
+# - string
+cache:
+  dir: path
+  #in GB
+  size: 0
+
+
+

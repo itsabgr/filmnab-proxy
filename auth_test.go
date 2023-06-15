@@ -16,11 +16,11 @@ func TestAuthCorrectness(t *testing.T) {
 	if err := auth(token, public); err != nil {
 		t.Error(err)
 	}
-	fp, err := Auth("/"+token+"/file", public)
+	fp, err := Auth("/"+token+"/file.ext", public)
 	if err != nil {
 		t.Error(err)
 	}
-	if fp != "/dir/sub/dir2/file" {
+	if fp != "/dir/sub/dir2/file.ext" {
 		t.Fail()
 	}
 }

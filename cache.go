@@ -60,7 +60,7 @@ func (i *index) leastRead() (key string) {
 	}
 	return least.key
 }
-func (i *index) reset(key string, size int64) {
+func (i *index) refresh(key string, size int64) {
 	pre, ok := i.map_.Swap(key, indexEntry{
 		lastRead:  time.Now().UTC().Unix(),
 		valueSize: size,
@@ -133,7 +133,7 @@ func cleanDB(db *leveldb.DB) error {
 	return iter.Error()
 }
 
-func (c *cache) find(ctx context.Context, key string) (val []byte, cached bool, countDeleted int, err error) {
+func (c *cache) fetch(ctx context.Context, key string) (val []byte, cached bool, countDeleted int, err error) {
 	val, err = c.onMissing(ctx, key)
 	if err != nil {
 		return nil, false, 0, err
@@ -148,7 +148,7 @@ func (c *cache) find(ctx context.Context, key string) (val []byte, cached bool, 
 	if c.db.Put([]byte(key), val, nil) != nil {
 		return val, false, count, err
 	}
-	c.index.reset(key, int64(len(val)))
+	c.index.refresh(key, int64(len(val)))
 	return val, true, count, nil
 }
 func (c *cache) clean(val int64) (bool, int, error) {
@@ -187,10 +187,10 @@ func (c *cache) Get(ctx context.Context, key string) (result, error) {
 	val, err := c.db.Get([]byte(key), nil)
 	switch err {
 	case leveldb.ErrNotFound:
-		val, cached, countDeleted, err := c.find(ctx, key)
+		val, cached, countDeleted, err := c.fetch(ctx, key)
 		return result{false, cached, countDeleted, val}, err
 	case nil:
-		c.index.reset(key, int64(len(val)))
+		c.index.refresh(key, int64(len(val)))
 		return result{true, true, 0, val}, err
 	default:
 		panic(err)

@@ -18,6 +18,10 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	if len(request.URL.Path) > 512 {
+		http.Error(writer, "too large path", http.StatusBadRequest)
+		return
+	}
 	writer.Header().Set("X-Robots-Tag", "noindex, nofollow")
 	_ = request.Body.Close()
 	ctx, cancel := context.WithTimeout(request.Context(), time.Second*10)
