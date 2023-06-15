@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 )
 
@@ -22,14 +21,6 @@ func must[R any](r R, e error) R {
 func assert(cond bool) {
 	if !cond {
 		panic(errors.New("assertion"))
-	}
-}
-
-func serve(httpServer *http.Server, cert, key string) error {
-	if key == "" {
-		return httpServer.ListenAndServe()
-	} else {
-		return httpServer.ListenAndServeTLS(cert, key)
 	}
 }
 

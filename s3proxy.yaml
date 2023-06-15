@@ -1,10 +1,15 @@
 #s3proxy config file
-s3proxy: default
+s3proxy: 2
 server:
   addr: :80
   tls:
     key:
     cert:
+    acme:
+      email: info@example.com
+      cache-dir: ~/.s3proxy/acme
+      domains:
+#        - example.com
   timeouts:
     read: 3s
     write: 15s
@@ -20,6 +25,6 @@ source:
 public-keys:
 # - AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 cache:
-  dir: /tmp/s3proxy
+  dir: ~/.s3proxy/s3proxy
   #in GB
   size: 0
