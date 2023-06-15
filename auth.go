@@ -4,7 +4,6 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,7 +14,6 @@ func Auth(path string, public ...ed25519.PublicKey) (filePath string, err error)
 	if len(public) == 0 {
 		return path, nil
 	}
-	fmt.Println(1)
 	path = strings.Trim(path, "/")
 	for _, pk := range public {
 		switch err = auth(filepath.Dir(path), pk); err {
