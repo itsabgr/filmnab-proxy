@@ -1,0 +1,33 @@
+#s3proxy config file
+s3proxy: 2
+server:
+  addr: 0.0.0.0:8080
+#  tls:
+#    key: /etc/letsencrypt/live/cdn.filmnab.com/privkey.pem
+#    cert: /etc/letsencrypt/live/cdn.filmnab.com/fullchain.pem
+  #    acme:
+  #      domains:
+  #        - cdn1.filmnab.com
+  #      email: info@filmnab.com
+  #      cache-dir: /var/lib/s3proxy/acme
+  timeouts:
+    read: 3s
+    write: 15s
+    idle: 10s
+  headers:
+    cors: "*filmnab.com, filmnab.com"
+    cache: no-store
+source:
+  bucket: c204499
+  host: c204499.parspack.net
+  id: SUb5LW7yjhkJQQzE
+  key: JNCx7NYMtHI4wK3D1BDKeqvJ6Qveg5UQ
+public-keys:
+# - UaS6L108B4Cyreq1SNJTLsAC_p-165d2edYF04Y_HpU
+cache:
+  dir: /tmp/s3proxy
+  #in GB
+  size: 0
+
+
+

@@ -4,30 +4,66 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
+func validateKey(key string) bool {
+	if len(key) > 255 {
+		return false
+	}
+	if len(key) <= 0 {
+		return false
+	}
+	if key == "/" {
+		return false
+	}
+	if strings.Contains(key, "//") {
+		return false
+	}
+	if strings.Contains(key, "./") {
+		return false
+	}
+	if strings.Contains(key, "/.") {
+		return false
+	}
+	if strings.Contains(key, `\`) {
+		return false
+	}
+	if strings.Contains(key, ":") {
+		return false
+	}
+	if filepath.Ext(key) == "" {
+		return false
+	}
+	return true
+}
+
 func Auth(path string, public ...ed25519.PublicKey) (filePath string, err error) {
 	if len(public) == 0 {
+		if false == validateKey(path) {
+			return "", errors.New("invalid path")
+		}
 		return path, nil
 	}
-	fmt.Println(1)
 	path = strings.Trim(path, "/")
 	for _, pk := range public {
 		switch err = auth(filepath.Dir(path), pk); err {
 		case errNoAuth:
 			continue
 		case nil:
-			return "/" + strings.SplitN(path, "/", 3)[2], nil
+			key := "/" + strings.SplitN(path, "/", 3)[2]
+			if false == validateKey(key) {
+				return "", errors.New("invalid path")
+			}
+			return key, nil
 		default:
 			break
 		}
 	}
-	return "", err
+	return "", errors.New("auth failed: " + err.Error())
 }
 func genAuth(dir string, deadline time.Time, key ed25519.PrivateKey) string {
 	var token string
@@ -40,7 +76,7 @@ func genAuth(dir string, deadline time.Time, key ed25519.PrivateKey) string {
 	return sig + "/" + token
 }
 
-var errNoAuth = errors.New("no auth")
+var errNoAuth = errors.New("unauthorized")
 
 func auth(dir string, public ed25519.PublicKey) error {
 	parts := strings.SplitN(dir, "/", 2)
@@ -64,7 +100,7 @@ func auth(dir string, public ed25519.PublicKey) error {
 		return errors.New("past timestamp")
 	}
 	if !ed25519.Verify(public, []byte(token), sig) {
-		return errors.New("unauthorized")
+		return errNoAuth
 	}
 	return nil
 }
