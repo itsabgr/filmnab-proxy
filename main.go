@@ -5,8 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"golang.org/x/crypto/acme/autocert"
 	yaml "gopkg.in/yaml.v3"
 	"io"
@@ -40,14 +38,8 @@ var config struct {
 			Cache string `yaml:"cache"`
 		} `yaml:"headers"`
 	} `yaml:"server"`
-	Source struct {
-		Test   time.Duration `yaml:"test"`
-		Bucket string        `yaml:"bucket"`
-		Host   string        `yaml:"host"`
-		ID     string        `yaml:"id"`
-		Key    string        `yaml:"key"`
-	} `yaml:"source"`
-	PublicKeys []string `yaml:"public-keys"`
+	Sources    map[string]Source `yaml:"sources"`
+	PublicKeys []string          `yaml:"public-keys"`
 	Cache      struct {
 		SizeGB uint16 `yaml:"size"`
 		Dir    string `yaml:"dir"`
@@ -78,13 +70,7 @@ func main() {
 		fmt.Println("NO CACHE")
 	}
 	publicKeys := mustParsePublicKeys(config.PublicKeys...)
-	client := must(Connect(&aws.Config{
-		Credentials:      credentials.NewStaticCredentials(config.Source.ID, config.Source.Key, ""),
-		Endpoint:         aws.String(config.Source.Host),
-		Region:           aws.String("us-east-1"),
-		DisableSSL:       aws.Bool(false),
-		S3ForcePathStyle: aws.Bool(true),
-	}, config.Source.Bucket, config.Source.Test))
+	client := must(Connect(config.Sources))
 	cache := Open(config.Cache.Dir, int64(config.Cache.SizeGB)*1e+9, client.Download)
 	defer func() { _ = cache.Close() }()
 	server := &Server{

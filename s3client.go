@@ -6,34 +6,56 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"io"
-	"time"
+	"strings"
 )
 
-type S3Client struct {
-	client s3iface.S3API
+type Source struct {
+	Bucket string `yaml:"bucket"`
+	Host   string `yaml:"host"`
+	ID     string `yaml:"id"`
+	Key    string `yaml:"key"`
+}
+type clientWithBucketName struct {
+	api    s3iface.S3API
 	bucket string
 }
+type S3Client struct {
+	clients map[string]clientWithBucketName
+}
 
-func Connect(config *aws.Config, bucket string, test time.Duration) (*S3Client, error) {
-	cli := s3.New(must(session.NewSession(config)))
-	if test > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), test)
-		defer cancel()
-		_, err := cli.HeadBucketWithContext(ctx, &s3.HeadBucketInput{
-			Bucket: aws.String(bucket),
+/*
+	&aws.Config{
+			Credentials:      credentials.NewStaticCredentials(config.Source.ID, config.Source.Key, ""),
+			Endpoint:         aws.String(config.Source.Host),
+			Region:           aws.String("us-east-1"),
+			DisableSSL:       aws.Bool(false),
+			S3ForcePathStyle: aws.Bool(true),
+		}, config.Source.Bucket, config.Source.Test)
+*/
+func Connect(configs map[string]Source) (*S3Client, error) {
+	clients := map[string]clientWithBucketName{}
+	for name, config := range configs {
+		ses, err := session.NewSession(&aws.Config{
+			Credentials:      credentials.NewStaticCredentials(config.ID, config.Key, ""),
+			Endpoint:         aws.String(config.Host),
+			Region:           aws.String("us-east-1"),
+			DisableSSL:       aws.Bool(false),
+			S3ForcePathStyle: aws.Bool(true),
 		})
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("test: could not connect to s3 %q", *config.Endpoint)
-		}
 		if err != nil {
 			return nil, err
 		}
+		clients[name] = clientWithBucketName{
+			s3.New(ses),
+			config.Bucket,
+		}
 	}
-	return &S3Client{cli, bucket}, nil
+	return &S3Client{clients}, nil
 }
 func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	//TODO fetch once
@@ -41,9 +63,20 @@ func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	case "", " ", "/", ".", "./", "//":
 		return nil, errors.New("invalid key")
 	}
-	response, err := s.client.GetObjectWithContext(ctx, &s3.GetObjectInput{
-		Bucket: &s.bucket,
-		Key:    &key,
+	parts := strings.SplitN(strings.TrimLeft(key, "/"), "/", 2)
+	if len(parts) != 2 {
+		return nil, errors.New("invalid source+path format")
+	}
+	source := parts[0]
+	client, has := s.clients[source]
+	if !has {
+		fmt.Println(key)
+		return nil, errors.New("source not found")
+	}
+	path := parts[1]
+	response, err := client.api.GetObjectWithContext(ctx, &s3.GetObjectInput{
+		Bucket: &client.bucket,
+		Key:    &path,
 	})
 	if err != nil {
 		if err, ok := err.(awserr.Error); ok && err.Code() == s3.ErrCodeNoSuchKey {
