@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"io"
 	"strings"
+	"unicode/utf8"
 )
 
 type Source struct {
@@ -62,6 +63,9 @@ func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	switch key {
 	case "", " ", "/", ".", "./", "//":
 		return nil, errors.New("invalid key")
+	}
+	if !utf8.ValidString(key) {
+		return nil, errors.New("non-utf8 key")
 	}
 	parts := strings.SplitN(strings.TrimLeft(key, "/"), "/", 2)
 	if len(parts) != 2 {
