@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -23,7 +24,11 @@ func assert(cond bool) {
 		panic(errors.New("assertion"))
 	}
 }
-
+func Close(closer io.Closer) {
+	if closer != nil {
+		_ = closer.Close()
+	}
+}
 func mustParsePublicKeys(keys ...string) []ed25519.PublicKey {
 	result := make([]ed25519.PublicKey, 0, len(keys))
 	for _, b64 := range keys {

@@ -88,7 +88,7 @@ func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 		}
 		return nil, err
 	}
-	defer func() { _ = response.Body.Close() }()
+	defer Close(response.Body)
 	content, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, errors.New("could not download: " + err.Error())

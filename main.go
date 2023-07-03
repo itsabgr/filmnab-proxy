@@ -72,7 +72,7 @@ func main() {
 	publicKeys := mustParsePublicKeys(config.PublicKeys...)
 	client := must(Connect(config.Sources))
 	cache := Open(config.Cache.Dir, int64(config.Cache.SizeGB)*1e+9, client.Download)
-	defer func() { _ = cache.Close() }()
+	defer Close(cache)
 	server := &Server{
 		publicKeys:  publicKeys,
 		cache:       cache,
@@ -108,7 +108,7 @@ func serve(httpServer *http.Server) error {
 			Email:      config.Server.TLS.ACME.Email,
 		}
 		ln := must(tls.Listen("tcp", httpServer.Addr, acme.TLSConfig()))
-		defer func() { _ = ln.Close() }()
+		defer Close(ln)
 		return httpServer.Serve(ln)
 	}
 	fmt.Println("NO TLS")
