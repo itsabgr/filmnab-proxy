@@ -16,10 +16,11 @@ server:
   headers:
     cors: string
     cache: string
-sources:
+source:
   timeout: "2s"
   map:
     source1:
+        root: "/rootpath" #optional
         bucket: string1
         host: string1
         id: string1

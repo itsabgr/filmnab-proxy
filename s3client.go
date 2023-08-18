@@ -51,6 +51,9 @@ func Connect(configs map[string]Source, defaultTimeout time.Duration) (*S3Client
 			config.Root,
 		}
 	}
+	if len(clients) == 0 {
+		panic(errors.New("no source"))
+	}
 	return &S3Client{clients, defaultTimeout}, nil
 }
 func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {

@@ -38,7 +38,7 @@ var config struct {
 			Cache string `yaml:"cache"`
 		} `yaml:"headers"`
 	} `yaml:"server"`
-	Sources struct {
+	Source struct {
 		Map     map[string]Source `yaml:"map"`
 		Timeout time.Duration     `yaml:"timeout"`
 	} `yaml:"source"`
@@ -73,7 +73,7 @@ func main() {
 		fmt.Println("NO CACHE")
 	}
 	publicKeys := mustParsePublicKeys(config.PublicKeys...)
-	client := must(Connect(config.Sources.Map, config.Sources.Timeout))
+	client := must(Connect(config.Source.Map, config.Source.Timeout))
 	cache := Open(config.Cache.Dir, int64(config.Cache.SizeGB)*1e+9, client.Download)
 	defer Close(cache)
 	server := &Server{
