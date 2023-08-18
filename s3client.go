@@ -53,17 +53,6 @@ func Connect(configs map[string]Source, defaultTimeout time.Duration) (*S3Client
 	}
 	return &S3Client{clients, defaultTimeout}, nil
 }
-func downloadAny(ctx context.Context, sources map[string]clientWithBucketName, path string, timeout time.Duration) ([]byte, error) {
-	var last error
-	for _, source := range sources {
-		var content []byte
-		content, last = downloadTimeout(ctx, &source, path, timeout)
-		if len(content) > 0 {
-			return content, nil
-		}
-	}
-	return nil, last
-}
 func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	//TODO fetch once
 	switch key {
@@ -88,8 +77,8 @@ func download(ctx context.Context, client *clientWithBucketName, path string) ([
 		Key:    aws.String(rootPath),
 	})
 	if err != nil {
-		var err awserr.Error
-		if errors.As(err, &err) && err.Code() == s3.ErrCodeNoSuchKey {
+		var awsErr awserr.Error
+		if errors.As(err, &awsErr) && awsErr.Code() == s3.ErrCodeNoSuchKey {
 			return nil, nil
 		}
 		return nil, err
@@ -111,4 +100,15 @@ func downloadTimeout(ctx context.Context, client *clientWithBucketName, path str
 		defer cancel()
 	}
 	return download(ctx, client, path)
+}
+func downloadAny(ctx context.Context, sources map[string]clientWithBucketName, path string, timeout time.Duration) ([]byte, error) {
+	var last error
+	for _, source := range sources {
+		var content []byte
+		content, last = downloadTimeout(ctx, &source, path, timeout)
+		if len(content) > 0 {
+			return content, nil
+		}
+	}
+	return nil, last
 }
