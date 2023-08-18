@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -11,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"io"
-	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -26,7 +25,8 @@ type clientWithBucketName struct {
 	bucket string
 }
 type S3Client struct {
-	clients map[string]clientWithBucketName
+	clients        map[string]clientWithBucketName
+	defaultTimeout time.Duration
 }
 
 /*
@@ -38,7 +38,7 @@ type S3Client struct {
 			S3ForcePathStyle: aws.Bool(true),
 		}, config.Source.Bucket, config.Source.Test)
 */
-func Connect(configs map[string]Source) (*S3Client, error) {
+func Connect(configs map[string]Source, defaultTimeout time.Duration) (*S3Client, error) {
 	clients := map[string]clientWithBucketName{}
 	for name, config := range configs {
 		ses, err := session.NewSession(&aws.Config{
@@ -56,7 +56,18 @@ func Connect(configs map[string]Source) (*S3Client, error) {
 			config.Bucket,
 		}
 	}
-	return &S3Client{clients}, nil
+	return &S3Client{clients, defaultTimeout}, nil
+}
+func downloadAny(ctx context.Context, sources map[string]clientWithBucketName, path string, timeout time.Duration) ([]byte, error) {
+	var last error
+	for _, source := range sources {
+		var content []byte
+		content, last = downloadTimeout(ctx, &source, path, timeout)
+		if len(content) > 0 {
+			return content, nil
+		}
+	}
+	return nil, last
 }
 func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	//TODO fetch once
@@ -67,17 +78,10 @@ func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	if !utf8.ValidString(key) {
 		return nil, errors.New("non-utf8 key")
 	}
-	parts := strings.SplitN(strings.TrimLeft(key, "/"), "/", 2)
-	if len(parts) != 2 {
-		return nil, errors.New("invalid source+path format")
-	}
-	source := parts[0]
-	client, has := s.clients[source]
-	if !has {
-		fmt.Println(key)
-		return nil, errors.New("source not found")
-	}
-	path := parts[1]
+	return downloadAny(ctx, s.clients, key, s.defaultTimeout)
+}
+
+func download(ctx context.Context, client *clientWithBucketName, path string) ([]byte, error) {
 	response, err := client.api.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: &client.bucket,
 		Key:    &path,
@@ -97,4 +101,12 @@ func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 		return nil, errors.New("failed to read body")
 	}
 	return content, nil
+}
+func downloadTimeout(ctx context.Context, client *clientWithBucketName, path string, timeout time.Duration) ([]byte, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	return download(ctx, client, path)
 }
