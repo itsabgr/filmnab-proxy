@@ -32,15 +32,6 @@ type S3Client struct {
 	defaultTimeout time.Duration
 }
 
-/*
-	&aws.Config{
-			Credentials:      credentials.NewStaticCredentials(config.Source.ID, config.Source.Key, ""),
-			Endpoint:         aws.String(config.Source.Host),
-			Region:           aws.String("us-east-1"),
-			DisableSSL:       aws.Bool(false),
-			S3ForcePathStyle: aws.Bool(true),
-		}, config.Source.Bucket, config.Source.Test)
-*/
 func Connect(configs map[string]Source, defaultTimeout time.Duration) (*S3Client, error) {
 	clients := map[string]clientWithBucketName{}
 	for name, config := range configs {
@@ -86,12 +77,19 @@ func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 }
 
 func download(ctx context.Context, client *clientWithBucketName, path string) ([]byte, error) {
+	rootPath := path
+	switch client.root {
+	case "", "/":
+	default:
+		rootPath = filepath.Join(client.root, path)
+	}
 	response, err := client.api.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: &client.bucket,
-		Key:    aws.String(filepath.Join(client.root, path)),
+		Key:    aws.String(rootPath),
 	})
 	if err != nil {
-		if err, ok := err.(awserr.Error); ok && err.Code() == s3.ErrCodeNoSuchKey {
+		var err awserr.Error
+		if errors.As(err, &err) && err.Code() == s3.ErrCodeNoSuchKey {
 			return nil, nil
 		}
 		return nil, err
