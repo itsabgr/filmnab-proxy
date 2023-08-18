@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"io"
+	"path/filepath"
 	"time"
 	"unicode/utf8"
 )
@@ -19,10 +20,12 @@ type Source struct {
 	Host   string `yaml:"host"`
 	ID     string `yaml:"id"`
 	Key    string `yaml:"key"`
+	Root   string `yaml:"root"`
 }
 type clientWithBucketName struct {
 	api    s3iface.S3API
 	bucket string
+	root   string
 }
 type S3Client struct {
 	clients        map[string]clientWithBucketName
@@ -54,6 +57,7 @@ func Connect(configs map[string]Source, defaultTimeout time.Duration) (*S3Client
 		clients[name] = clientWithBucketName{
 			s3.New(ses),
 			config.Bucket,
+			config.Root,
 		}
 	}
 	return &S3Client{clients, defaultTimeout}, nil
@@ -84,7 +88,7 @@ func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 func download(ctx context.Context, client *clientWithBucketName, path string) ([]byte, error) {
 	response, err := client.api.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: &client.bucket,
-		Key:    &path,
+		Key:    aws.String(filepath.Join(client.root, path)),
 	})
 	if err != nil {
 		if err, ok := err.(awserr.Error); ok && err.Code() == s3.ErrCodeNoSuchKey {
