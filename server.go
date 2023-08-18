@@ -45,6 +45,10 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		http.Error(writer, err.Error(), http.StatusUnauthorized)
 		return
 	}
+	if !filepath.IsAbs(filePath) {
+		http.Error(writer, "relative file path", http.StatusBadRequest)
+		return
+	}
 	res, err := s.cache.Get(request.Context(), filePath)
 	if err != nil {
 		http.Error(writer, err.Error(), http.StatusInternalServerError)
