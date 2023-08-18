@@ -18,18 +18,16 @@ server:
     cache: string
 source:
   timeout: "2s"
-  map:
-    source1:
-        root: "/rootpath" #optional
-        bucket: string1
-        host: string1
-        id: string1
-        key: string1
-    source2:
-        bucket: string2
-        host: string2
-        id: string2
-        key: string2
+  list:
+  - host: string1
+    root: "/rootpath" #optional
+    bucket: string1
+    id: string1
+    key: string1
+  - host: string2
+    bucket: string2
+    id: string2
+    key: string2
 public-keys:
  - rawBase64URL
 cache:
