@@ -40,6 +40,7 @@ var config struct {
 	} `yaml:"server"`
 	Source struct {
 		List    []Source      `yaml:"list"`
+		Test    bool          `yaml:"test,omitempty"`
 		Timeout time.Duration `yaml:"timeout"`
 	} `yaml:"source"`
 	PublicKeys []string `yaml:"public-keys"`
@@ -63,8 +64,8 @@ func main() {
 	*flagConfig = must(filepath.Abs(*flagConfig))
 	fmt.Println("config", *flagConfig)
 	throw(yaml.Unmarshal(must(os.ReadFile(*flagConfig)), &config))
-	if config.S3Proxy != "2" {
-		panic(errors.New(`config file does not contains "s3proxy: 2""`))
+	if config.S3Proxy != "3" {
+		panic(errors.New(`config file does not contains "s3proxy: 3""`))
 	}
 	if len(config.PublicKeys) == 0 {
 		fmt.Println("NO AUTH")
@@ -73,7 +74,7 @@ func main() {
 		fmt.Println("NO CACHE")
 	}
 	publicKeys := mustParsePublicKeys(config.PublicKeys...)
-	client := must(Connect(config.Source.Timeout, config.Source.List...))
+	client := must(Connect(config.Source.Test, config.Source.Timeout, config.Source.List...))
 	cache := Open(config.Cache.Dir, int64(config.Cache.SizeGB)*1e+9, client.Download)
 	defer Close(cache)
 	server := &Server{

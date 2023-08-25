@@ -32,7 +32,7 @@ type S3Client struct {
 	defaultTimeout time.Duration
 }
 
-func Connect(defaultTimeout time.Duration, list ...Source) (*S3Client, error) {
+func Connect(testSources bool, defaultTimeout time.Duration, list ...Source) (*S3Client, error) {
 	var clients []client
 	for _, source := range list {
 		ses, err := session.NewSession(&aws.Config{
@@ -45,17 +45,24 @@ func Connect(defaultTimeout time.Duration, list ...Source) (*S3Client, error) {
 		if err != nil {
 			return nil, err
 		}
-		clients = append(clients, client{
+		cli := client{
 			s3.New(ses),
 			source.Bucket,
 			source.Root,
-		})
+		}
+		if testSources {
+			if err := cli.Test(context.Background(), time.Second*5); err != nil {
+				return nil, err
+			}
+		}
+		clients = append(clients, cli)
 	}
 	if len(clients) == 0 {
 		panic(errors.New("no source"))
 	}
 	return &S3Client{clients, defaultTimeout}, nil
 }
+
 func (s *S3Client) Download(ctx context.Context, key string) ([]byte, error) {
 	//TODO fetch once
 	switch key {
@@ -115,4 +122,28 @@ func (client *client) DownloadTimeout(ctx context.Context, path string, timeout 
 		defer cancel()
 	}
 	return client.download(ctx, path)
+}
+func (client *client) Test(ctx context.Context, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	rootPath := client.root
+	if rootPath == "" {
+		rootPath = "/"
+	}
+	response, err := client.api.GetObjectWithContext(ctx, &s3.GetObjectInput{
+		Bucket: &client.bucket,
+		Key:    aws.String(rootPath),
+	})
+	defer func() {
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
+	}()
+	if err != nil {
+		var awsErr awserr.Error
+		if errors.As(err, &awsErr) && awsErr.Code() != s3.ErrCodeNoSuchKey {
+			return err
+		}
+	}
+	return nil
 }
