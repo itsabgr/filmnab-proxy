@@ -1,4 +1,4 @@
-module github.com/itsabgr/s3proxy/v2
+module github.com/itsabgr/s3proxy/v3
 
 go 1.20
 
