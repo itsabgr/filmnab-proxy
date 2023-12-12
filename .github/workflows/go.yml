@@ -1,19 +1,29 @@
-on:
-  release:
-    types: [created]
+name: Build Proxy
 
-permissions:
-    contents: write
-    packages: write
+on:
+  push:
+    branches:
+      - master
 
 jobs:
-  release-linux-amd64:
-    name: release linux/amd64
+  build:
+    name: Build
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v3
-    - uses: wangyoucao577/go-release-action@v1
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        goos: linux
-        goarch: amd64
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.21
+
+      - name: Build Go Project
+        run: go build -o s3proxy
+
+      - name: Archive Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: built-artifacts
+          path: s3proxy
