@@ -1,4 +1,4 @@
-Install 
+To Install 
 
 `go install github.com/itsabgr/s3proxy/v3@latest`
 
