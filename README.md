@@ -6,3 +6,44 @@ To Install
 Run
 
 `s3proxy -c path/to/config.yaml`
+
+use this yaml file for config:
+
+```
+#s3proxy config file
+s3proxy: 3
+server:
+  addr: ip:port
+  tls:
+    key: path
+    cert: path
+    acme:
+      domain: domain
+      email: email@addr
+      cache-dir: path
+  timeouts:
+    read: 3s
+    write: 15s
+    idle: 10s
+  headers:
+    cors: string
+    cache: string
+source:
+  timeout: "2s"
+  list:
+  - host: string1
+    root: "/rootpath" #optional
+    bucket: string1
+    id: string1
+    key: string1
+  - host: string2
+    bucket: string2
+    id: string2
+    key: string2
+public-keys:
+ - rawBase64URL
+cache:
+  dir: path
+  #in GB
+  size: 0
+```
